@@ -1,14 +1,45 @@
 import Fluent
 import Vapor
 
+
+
+
 func routes(_ app: Application) throws {
-    app.get { req async in
-        "It works!"
+    var apiRoutes = app.grouped("api", "v1")
+    
+    apiRoutes = apiRoutes.grouped(User.authenticator())
+    apiRoutes.post("login") { req async throws -> UserToken in
+        let user = try req.auth.require(User.self)
+        let token = try user.generateToken()
+        try await token.save(on: req.db)
+        return token
     }
-
-    app.get("hello") { req async -> String in
-        "Hello, world!"
+    
+    
+    apiRoutes = apiRoutes.grouped(UserToken.authenticator())
+    apiRoutes.get("me") { req -> User in
+        try req.auth.require(User.self)
     }
-
-    try app.register(collection: TodoController())
+    
+    
+    apiRoutes.webSocket("chat") { req, ws in
+        ws.onText { ws, text in
+            print(req)
+            
+            ws.send("hello")
+            ws.sendPing()
+        }
+        
+        ws.onPing { ws in
+            print("ping")
+        }
+        
+        ws.onPong { ws in
+            print("pong")
+        }
+    }
+    
+    
+    try apiRoutes.register(collection: UsersController())
+    try apiRoutes.register(collection: FilesController())
 }
